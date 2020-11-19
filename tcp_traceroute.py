@@ -96,7 +96,7 @@ def perform_ping(dst_addr, dst_port, ttl):
     id = os.getpid() & 0xFFFF
 
     send_ping(raw_socket, dst_addr, dst_port, id)
-    delay = rcv_ping(raw_socket, id, dst_addr)
+    delay = rcv_ping(raw_socket)
 
     raw_socket.close()
 

@@ -15,6 +15,7 @@ SOCKET_TIMEOUT = 0
 DST_REACHED = 1
 ICMP_ECHO_REQUEST = 8
 
+
 def checksum(str_):
     str_ = bytearray(str_)
     csum = 0
@@ -43,21 +44,21 @@ def rcv_ping(raw_socket):
     start = time.time()
 
     while (start + TIMEOUT - time.time()) > 0:
+
         try:
-            recPacket, (addr, x) = raw_socket.recvfrom(1024)
+            rcvd_pkt, (addr, x) = raw_socket.recvfrom(1024)
         except socket.timeout:
-            break  # timed out
-        timeReceived = time.time()
+            break
 
-        # Fetch the ICMPHeader fromt the IP
-        icmpHeader = recPacket[20:28]
+        rcvd_time = time.time()
+        icmp_hdr = rcvd_pkt[20:28]
 
-        icmpType, code, checksum, packetID, sequence = struct.unpack("bbHHh", icmpHeader)
+        icmp_type, code, checksum, packetID, sequence = struct.unpack("bbHHh", icmp_hdr)
 
-        if icmpType == 11 and code == 0:
-            return (timeReceived - start), addr, None
-        elif icmpType == 0 and code == 0:
-            return (timeReceived - start), addr, DST_REACHED
+        if icmp_type == 11 and code == 0:
+            return (rcvd_time - start), addr, None
+        elif icmp_type == 0 and code == 0:
+            return (rcvd_time - start), addr, DST_REACHED
 
     return None, None, SOCKET_TIMEOUT
 
@@ -65,16 +66,11 @@ def rcv_ping(raw_socket):
 # sends a packet to the target
 def send_ping(raw_socket, dst_addr, dst_port, id):
 
-    # Make a dummy header with a 0 checksum
-    # Header is type (8), code (8), checksum (16), id (16), sequence (16)
     header = struct.pack("bbHHh", ICMP_ECHO_REQUEST, 0, 0, id, 1)
     data = struct.pack("d", time.time())
-    # Calculate the checksum on the data and the dummy header.
     myChecksum = checksum(header + data)
 
-    # Get the right checksum, and put in the header
     if sys.platform == 'darwin':
-        # htons: Convert 16-bit integers from host to network  byte order
         myChecksum = socket.htons(myChecksum) & 0xffff
     else:
         myChecksum = socket.htons(myChecksum)
@@ -82,8 +78,8 @@ def send_ping(raw_socket, dst_addr, dst_port, id):
     header = struct.pack("bbHHh", ICMP_ECHO_REQUEST, 0, myChecksum, id, 1)
     packet = header + data
 
-    # AF_INET address must be tuple, not str
-    raw_socket.sendto(packet, (dst_addr, 1))
+    raw_socket.sendto(packet, (dst_addr, dst_port))
+
 
 # controls flow for performing one ping
 def perform_ping(dst_addr, dst_port, ttl):

@@ -3,7 +3,6 @@ import argparse
 import time
 import socket
 import struct
-import scapy.all
 from scapy.layers.inet import *
 
 # Author: Josh Messitte (811976008)
@@ -16,26 +15,30 @@ DST_REACHED = 1
 ICMP_ECHO_REQUEST = 8
 
 
-def checksum(str_):
-    str_ = bytearray(str_)
-    csum = 0
-    countTo = (len(str_) // 2) * 2
+def checksum(pkt):
+
+    # perform byte manipulation on packet to get checksum
+    pkt = bytearray(pkt)
+    checksum = 0
+    countTo = (len(pkt) // 2) * 2
 
     for count in range(0, countTo, 2):
-        thisVal = str_[count+1] * 256 + str_[count]
-        csum = csum + thisVal
-        csum = csum & 0xffffffff
 
-    if countTo < len(str_):
-        csum = csum + str_[-1]
-        csum = csum & 0xffffffff
+        val = pkt[count+1] * 256 + pkt[count]
+        checksum = checksum + val
+        checksum = checksum & 0xffffffff
 
-    csum = (csum >> 16) + (csum & 0xffff)
-    csum = csum + (csum >> 16)
-    answer = ~csum
-    answer = answer & 0xffff
-    answer = answer >> 8 | (answer << 8 & 0xff00)
-    return answer
+    if countTo < len(pkt):
+        checksum = checksum + pkt[-1]
+        checksum = checksum & 0xffffffff
+
+    checksum = (checksum >> 16) + (checksum & 0xffff)
+    checksum = checksum + (checksum >> 16)
+    result = ~checksum
+    result = result & 0xffff
+    result = result >> 8 | (result << 8 & 0xff00)
+
+    return result
 
 
 # receives the echo from the target, returns delay and more info
@@ -46,7 +49,7 @@ def rcv_ping(raw_socket):
     while (start + TIMEOUT - time.time()) > 0:
 
         try:
-            rcvd_pkt, (addr, x) = raw_socket.recvfrom(1024)
+            rcvd_pkt, (addr, port) = raw_socket.recvfrom(1024)
         except socket.timeout:
             break
 
@@ -64,7 +67,8 @@ def rcv_ping(raw_socket):
 
 
 # sends a packet to the target
-def send_ping(raw_socket, dst_addr, dst_port, id):
+def send_ping(raw_socket, dst_addr, dst_port, id, ttl):
+    # the packets we will be sending are IMCP echo request packets
 
     header = struct.pack("bbHHh", ICMP_ECHO_REQUEST, 0, 0, id, 1)
     data = struct.pack("d", time.time())
@@ -76,9 +80,11 @@ def send_ping(raw_socket, dst_addr, dst_port, id):
         myChecksum = socket.htons(myChecksum)
 
     header = struct.pack("bbHHh", ICMP_ECHO_REQUEST, 0, myChecksum, id, 1)
-    packet = header + data
+    pkt = header + data
 
-    raw_socket.sendto(packet, (dst_addr, dst_port))
+    #pkt = IP(dst=dst_addr,ttl=ttl)/TCP(dport=dst_port, flags="S")/ICMP(seq=1)
+
+    raw_socket.sendto(pkt, (dst_addr, dst_port))
 
 
 # controls flow for performing one ping
@@ -91,7 +97,7 @@ def perform_ping(dst_addr, dst_port, ttl):
     # store current process ID
     id = os.getpid() & 0xFFFF
 
-    send_ping(raw_socket, dst_addr, dst_port, id)
+    send_ping(raw_socket, dst_addr, dst_port, id,ttl)
     delay = rcv_ping(raw_socket)
 
     raw_socket.close()

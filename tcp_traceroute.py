@@ -41,7 +41,7 @@ def checksum(pkt):
     return result
 
 
-# receives the echo from the target, returns delay and more info
+# receives the echo from the target, returns delay
 def rcv_ping(raw_socket):
 
     start = time.time()
@@ -74,15 +74,10 @@ def send_ping(raw_socket, dst_addr, dst_port, id, ttl):
     data = struct.pack("d", time.time())
     myChecksum = checksum(header + data)
 
-    if sys.platform == 'darwin':
-        myChecksum = socket.htons(myChecksum) & 0xffff
-    else:
-        myChecksum = socket.htons(myChecksum)
-
+    myChecksum = socket.htons(myChecksum)
+                
     header = struct.pack("bbHHh", ICMP_ECHO_REQUEST, 0, myChecksum, id, 1)
     pkt = header + data
-
-    #pkt = IP(dst=dst_addr,ttl=ttl)/TCP(dport=dst_port, flags="S")/ICMP(seq=1)
 
     raw_socket.sendto(pkt, (dst_addr, dst_port))
 
@@ -143,10 +138,12 @@ def traceroute(max_hops,dst_port,dst_host,dst_addr):
             print_part(delay, address, prev_addr)
             prev_addr = address
 
+        print()
+        
         if info == DST_REACHED:
             break
 
-        print()
+        
 
 
 def main():

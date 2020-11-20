@@ -12,7 +12,7 @@ $ python3 tcp_traceroute.py [-m MAX_HOPS] [-p DST_PORT] -t TARGET
 
 ### Current State:
 - Currently works as an ICMP traceroute, sending ICMP echo request packets over raw sockets.
-- Performs similar to traceroute, except where traceroute stops, my script continues to print asteriks up until the MAX_HOPS value.
+- Sometimes fails to get hostname and displays IP address twice.
 
 ### To Do:
 - Implement TCP SYN packet part of program (send TCP SYN packets over raw socket, need to listen for TCP and ICMP)

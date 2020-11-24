@@ -16,3 +16,4 @@ $ python3 tcp_traceroute.py [-m MAX_HOPS] [-p DST_PORT] -t TARGET
 
 ### To Do:
 - Implement TCP SYN packet part of program (send TCP SYN packets over raw socket, need to listen for TCP and ICMP)
+- Listen for TCP and ICMP packets simultaneously?

@@ -12,13 +12,14 @@ from scapy.layers.inet import *
 TIMEOUT = 0.25
 SOCKET_TIMEOUT = 0
 DST_REACHED = 1
+DST_UNREACHABLE = 2
 ICMP_ECHO_REQUEST = 8
 
 
 # receives the echo from the target, returns delay
 def rcv_ping(raw_socket):
 
-    #tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+    # tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     start = time.time()
 
     while (start + TIMEOUT - time.time()) > 0:
@@ -31,15 +32,19 @@ def rcv_ping(raw_socket):
         rcvd_time = time.time()
         ip = IP(rcvd_pkt)
         icmp = ip[ICMP]
-        #icmp.show()
+        # icmp.show()
         imcp_code = ip[ICMP].code
         icmp_type = ip[ICMP].type
-    
-        
+
+        # ICMP type 11 code 0 --> TIME EXCEEDED
         if icmp_type == 11 and imcp_code == 0:
             return (rcvd_time - start), addr, None
+        # ICMP type 0 code 0 --> ECHO REPLY (DST Reached)
         elif icmp_type == 0 and imcp_code == 0:
             return (rcvd_time - start), addr, DST_REACHED
+        # ICMP type 3 --> DST UNREACHABLE
+        elif icmp_type == 3:
+            return None, None, DST_UNREACHABLE
 
     return None, None, SOCKET_TIMEOUT
 
@@ -47,15 +52,19 @@ def rcv_ping(raw_socket):
 # sends a packet to the target
 def send_ping(raw_socket, dst_addr, dst_port, id, ttl):
     # the packets we will be sending TCP SYN packets
-    pkt = ICMP(type=8,code=0,chksum=0,id=id,seq=1)
+    pkt = ICMP(type=8, code=0, chksum=0, id=id, seq=1)
     raw_socket.sendto(bytes(pkt), (dst_addr, dst_port))
 
 
 # controls flow for performing one ping
 def perform_ping(dst_addr, dst_port, ttl):
 
+    #out_raw = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+    #out_raw.setsockopt(socket.SOL_IP, socket.IP_HDRINCL, 1)
+    #in_raw = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_IP))
+
     raw_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-    raw_socket.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
+    raw_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
     raw_socket.settimeout(TIMEOUT)
 
     # store current process ID
@@ -71,11 +80,11 @@ def perform_ping(dst_addr, dst_port, ttl):
 
 # prints results of a ping
 def print_part(delay, address, prev_addr):
-
     if not delay:
         print('*', end=' ', flush=True)
         return
 
+    # to ms
     delay *= 1000
 
     if not prev_addr == address:

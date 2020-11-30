@@ -19,18 +19,19 @@ ICMP_ECHO_REQUEST = 8
 # receives the echo from the target, returns delay
 def rcv_ping(icmp_socket,tcp_socket):
 
-    # tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+    
     start = time.time()
 
     while (start + TIMEOUT - time.time()) > 0:
 
         try:
-            rcvd_pkt, addr = icmp_socket.recvfrom(1024)
+            icmp_pkt, addr = icmp_socket.recvfrom(1024)
+            #tcp_pkt, addr = tcp_socket.recvfrom(1024)
         except socket.timeout:
             break
 
         rcvd_time = time.time()
-        ip = IP(rcvd_pkt)
+        ip = IP(icmp_pkt)
         icmp = ip[ICMP]
         # icmp.show()
         imcp_code = ip[ICMP].code
@@ -57,7 +58,7 @@ def send_ping(icmp_sock, out_raw, dst_addr, dst_port, id, ttl):
     syn_pkt = IP(dst=dst_addr,ttl=ttl)/TCP(dport=dst_port, flags = 'S')
     
     out_raw.sendto(bytes(syn_pkt), (dst_addr, dst_port))
-    icmp_sock.sendto(bytes(icmp_pkt), (dst_addr, dst_port))
+    icmp_sock.sendto(bytes(icmp_pkt), (dst_addr, 0))
 
 
 
@@ -66,7 +67,6 @@ def perform_ping(dst_addr, dst_port, ttl):
 
     out_raw = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
     out_raw.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
-
     
     in_raw = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     in_raw.settimeout(TIMEOUT)

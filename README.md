@@ -12,8 +12,8 @@ $ python3 tcp_traceroute.py [-m MAX_HOPS] [-p DST_PORT] -t TARGET
 
 ### Current State:
 - Currently works as an ICMP traceroute, sending ICMP echo request packets over raw sockets.
+- Send a TCP SYN packet, not sure if using TCP SYN probe correctly
 - Sometimes fails to get hostname and displays IP address twice.
 
 ### To Do:
-- Implement TCP SYN packet part of program (send TCP SYN packets over raw socket, need to listen for TCP and ICMP)
-- Listen for TCP and ICMP packets simultaneously?
+- Finalize TCP SYN part of script

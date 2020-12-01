@@ -9,29 +9,26 @@ from scapy.layers.inet import *
 # CSCI 6760 Project 4: tcp_traceroute.py
 # Usage: sudo python3 tcp_traceroute.py [-m MAX_HOPS] [-p DST_PORT] [-t TARGET]
 
-TIMEOUT = 0.25
-SOCKET_TIMEOUT = 0
+TIMEOUT = 0.025
 DST_REACHED = 1
 DST_UNREACHABLE = 2
 ICMP_ECHO_REQUEST = 8
-
+SOCKET_TIMEOUT = 0
 
 # receives the echo from the target, returns delay
-def rcv_ping(icmp_socket):
+def rcv_icmp(s):
     start = time.time()
 
     while (start + TIMEOUT - time.time()) > 0:
 
         try:
-            icmp_pkt, addr = icmp_socket.recvfrom(1024)
-            # tcp_pkt, addr = tcp_socket.recvfrom(1024)
+            icmp_pkt, addr = s.recvfrom(1024)
         except socket.timeout:
             break
 
         rcvd_time = time.time()
         ip = IP(icmp_pkt)
         icmp = ip[ICMP]
-        # icmp.show()
         imcp_code = ip[ICMP].code
         icmp_type = ip[ICMP].type
 
@@ -48,26 +45,25 @@ def rcv_ping(icmp_socket):
     return None, None, SOCKET_TIMEOUT
 
 
-# sends a packet to the target
-def send_ping(icmp_sock, dst_addr, dst_port, id, ttl):
-    # the packets we will be sending TCP SYN packets
-    icmp_pkt = ICMP(type=8, code=0, chksum=0, id=id, seq=1)
-    icmp_sock.sendto(bytes(icmp_pkt), (dst_addr, 0))
-
 # controls flow for performing one ping
-def perform_ping(dst_addr, dst_port, ttl):
+def send_probe(dst_addr, dst_port, ttl):
 
-    icmp_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-    icmp_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
-    icmp_socket.settimeout(TIMEOUT)
+    # sending socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+    s.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
 
-    # store current process ID
-    id = os.getpid() & 0xFFFF
+    # receiving sockets
+    recv_icmp = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+    recv_tcp = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+    recv_icmp.settimeout(TIMEOUT)
+    recv_tcp.settimeout(TIMEOUT)
 
-    send_ping(icmp_socket, dst_addr, dst_port, id, ttl)
-    delay = rcv_ping(icmp_socket)
+    syn_pkt = IP(dst=dst_addr, ttl=ttl) / TCP(dport=dst_port, sport=54321, flags='S')
+    s.sendto(bytes(syn_pkt), (dst_addr, dst_port))
 
-    icmp_socket.close()
+
+    delay = rcv_icmp(recv_icmp)
+    recv_icmp.close()
 
     return delay
 
@@ -104,7 +100,7 @@ def traceroute(max_hops, dst_port, dst_host, dst_addr):
 
         # compute latency 3 times
         for i in range(3):
-            delay, address, info = perform_ping(dst_addr, dst_port, ttl)
+            delay, address, info = send_probe(dst_addr, dst_port, ttl)
             print_part(delay, address, prev_addr)
             prev_addr = address
 

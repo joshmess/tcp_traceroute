@@ -49,32 +49,25 @@ def rcv_ping(icmp_socket):
 
 
 # sends a packet to the target
-def send_probe(s, dst_addr, dst_port, id, ttl):
-
-    syn_pkt = IP(dst=dst_addr, ttl=ttl) / TCP(dport=dst_port, sport=54321, flags='S')
-    s.sendto(bytes(syn_pkt), (dst_addr, dst_port))
-
+def send_ping(icmp_sock, dst_addr, dst_port, id, ttl):
+    # the packets we will be sending TCP SYN packets
+    icmp_pkt = ICMP(type=8, code=0, chksum=0, id=id, seq=1)
+    icmp_sock.sendto(bytes(icmp_pkt), (dst_addr, 0))
 
 # controls flow for performing one ping
 def perform_ping(dst_addr, dst_port, ttl):
 
-    # sending socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
-    s.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
-
-    # receiving sockets
-    recv_icmp = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-    recv_tcp = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-    recv_icmp.settimeout(2)
-    recv_tcp.settimeout(2)
+    icmp_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+    icmp_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
+    icmp_socket.settimeout(TIMEOUT)
 
     # store current process ID
     id = os.getpid() & 0xFFFF
 
-    send_probe(s, dst_addr, dst_port, id, ttl)
+    send_ping(icmp_socket, dst_addr, dst_port, id, ttl)
+    delay = rcv_ping(icmp_socket)
 
-    delay = rcv_ping(recv_icmp)
-    recv_icmp.close()
+    icmp_socket.close()
 
     return delay
 

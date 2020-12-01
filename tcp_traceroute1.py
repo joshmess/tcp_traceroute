@@ -52,43 +52,50 @@ def traceroute(max_hops, dst_port, dst_host, dst_addr):
     type = socket.IPPROTO_ICMP
     ttl = 1
 
-    while type == socket.IPPROTO_ICMP and ttl <= max_hops:
+    for ttl in range(1,max_hops+1):
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-        s.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
+        print('{:2} '.format(ttl), end=' ', flush=True)
+        prev_addr = None
 
-        recv_icmp_socket = RecvSocket(socket.IPPROTO_ICMP, TIMEOUT)
-        recv_tcp_socket = RecvSocket(socket.IPPROTO_TCP, TIMEOUT)
+        # compute latency 3 times
+        for i in range(3):
 
-        threads = [threading.Thread(target=recv_icmp_socket.run), threading.Thread(target=recv_tcp_socket.run)]
-        syn_pkt = IP(dst=dst_addr, ttl=ttl) / TCP(dport=dst_port, sport=54321, flags='S')
+            # SOCKET to send TCP SYN
+            s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+            s.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
 
-        s.sendto(bytes(syn_pkt), (dst_addr, dst_port))
+            # Sockets to simultaneously listen for TCP and ICMP
+            recv_icmp_socket = RecvSocket(socket.IPPROTO_ICMP, TIMEOUT)
+            recv_tcp_socket = RecvSocket(socket.IPPROTO_TCP, TIMEOUT)
+            threads = [threading.Thread(target=recv_icmp_socket.run), threading.Thread(target=recv_tcp_socket.run)]
 
-        for t in threads:
-            t.start()
-            t.join()
+            syn_pkt = IP(dst=dst_addr, ttl=ttl) / TCP(dport=dst_port, sport=54321, flags='S')
+            s.sendto(bytes(syn_pkt), (dst_addr, dst_port))
 
-        delta_t = 0
-        if recv_tcp_socket.getResponseAddress():
-            address = recv_tcp_socket.getResponseAddress()
-            delta_t = recv_tcp_socket.getTimeCost()
-            type = socket.IPPROTO_TCP
-        elif recv_icmp_socket.getResponseAddress():
-            address = recv_icmp_socket.getResponseAddress()
-            delta_t = recv_icmp_socket.getTimeCost()
-            type = socket.IPPROTO_ICMP
-        else:
-            address = None
+            # listen for responses (tcp & icmp)
+            for t in threads:
+                t.start()
+                t.join()
 
-        if address:
-            print("%2d: %4dms, %3d.%3d.%3d.%3d" % (
-            ttl, int(delta_t * 1000), socket.inet_aton(address)[0], socket.inet_aton(address)[1],
-            socket.inet_aton(address)[2], socket.inet_aton(address)[3]))
-        else:
-            print("%2d: ____ms, ___.___.___.___" % (ttl))
+            delta_t = 0
 
-        ttl += 1
+            if recv_tcp_socket.getResponseAddress():
+                address = recv_tcp_socket.getResponseAddress()
+                delta_t = recv_tcp_socket.getTimeCost()
+            elif recv_icmp_socket.getResponseAddress():
+                address = recv_icmp_socket.getResponseAddress()
+                delta_t = recv_icmp_socket.getTimeCost()
+            else:
+                address = None
+
+            if address:
+                print("%2d: %4dms, %3d.%3d.%3d.%3d" % (
+                ttl, int(delta_t * 1000), socket.inet_aton(address)[0], socket.inet_aton(address)[1],
+                socket.inet_aton(address)[2], socket.inet_aton(address)[3]))
+            else:
+                print("%2d: ____ms, ___.___.___.___" % (ttl))
+
+            ttl += 1
 
 
 def main():

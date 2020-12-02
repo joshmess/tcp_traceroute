@@ -10,7 +10,7 @@ import threading
 # CSCI 6760 Project 4: tcp_traceroute.py
 # Usage: sudo python3 tcp_traceroute.py [-m MAX_HOPS] [-p DST_PORT] [-t TARGET]
 
-TIMEOUT = 0.5
+TIMEOUT = .025
 DST_REACHED = 1
 DST_UNREACHABLE = 2
 ICMP_ECHO_REQUEST = 8
@@ -19,9 +19,10 @@ SOCKET_TIMEOUT = 0
 
 class RecvSocket:
 
-    def __init__(self, type):
+    def __init__(self, type,ttl):
         self.type = type
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, type)
+        self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
         self.sock.settimeout(TIMEOUT)
         self.pkt = b''
         self.info = None
@@ -30,7 +31,7 @@ class RecvSocket:
         self.start_time = None
         self.rcv_time = None
         self.timeout = False
-
+        
     def run(self):
 
         self.start_time = time.time()
@@ -40,36 +41,39 @@ class RecvSocket:
             try:
                 self.pkt, self.address = self.sock.recvfrom(1024)
             except socket.timeout:
-                self.timeout = True
                 break
 
+        
             self.rcv_time = time.time()
-
+        
+            
             if self.type == 1:
                 ip = IP(self.pkt)
+                icmp = ip[ICMP]
+                #icmp.show()
                 imcp_code = ip[ICMP].code
                 icmp_type = ip[ICMP].type
 
                 # ICMP type 11 code 0 --> TIME EXCEEDED
                 if icmp_type == 11 and imcp_code == 0:
+                    
                     self.delay = self.rcv_time - self.start_time
                     self.info = None
                 # ICMP type 0 code 0 --> ECHO REPLY (DST Reached)
                 elif icmp_type == 0 and imcp_code == 0:
+                    
                     self.delay = self.rcv_time - self.start_time
                     self.info = DST_REACHED
                 # ICMP type 3 --> DST UNREACHABLE
                 elif icmp_type == 3:
+                    
                     self.delay = None
                     self.info = DST_UNREACHABLE
-            else:
+                    
+            elif self.type == 6:
                 self.delay = self.rcv_time - self.start_time
 
-        if self.timeout:
-            self.delay = None
-            self.address = None
-            self.info = SOCKET_TIMEOUT
-
+        
     def get_addr(self):
         if self.address:
             return self.address
@@ -90,9 +94,10 @@ def send_probe(dst_addr, dst_port, ttl):
     s.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
 
     # receiving sockets
-    recv_icmp = RecvSocket(socket.IPPROTO_ICMP)
-    recv_tcp = RecvSocket(socket.IPPROTO_TCP)
-    threads = [threading.Thread(target=recv_icmp.run), threading.Thread(target=recv_tcp.run)]
+    recv_icmp = RecvSocket(socket.IPPROTO_ICMP,ttl)
+    recv_tcp = RecvSocket(socket.IPPROTO_TCP,ttl)
+    threads = [threading.Thread(target=recv_icmp.run),threading.Thread(target=recv_tcp.run)]
+    #threads = [threading.Thread(target=recv_icmp.run)]
 
     syn_pkt = IP(dst=dst_addr, ttl=ttl) / TCP(dport=dst_port, sport=54321, flags='S')
     s.sendto(bytes(syn_pkt), (dst_addr, dst_port))
@@ -101,10 +106,10 @@ def send_probe(dst_addr, dst_port, ttl):
         t.start()
         t.join()
 
-    if recv_tcp.get_addr():
-        return recv_tcp.get_delay(), recv_tcp.get_addr(), recv_tcp.get_info()
-    elif recv_icmp.get_addr():
+    if recv_icmp.get_addr():
         return recv_icmp.get_delay(), recv_icmp.get_addr(), recv_icmp.get_info()
+    elif recv_tcp.get_addr():
+        return recv_tcp.get_delay(), recv_tcp.get_addr(), recv_tcp.get_info()
     else:
         return None, None, SOCKET_TIMEOUT
 

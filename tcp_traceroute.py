@@ -56,6 +56,7 @@ def send_probe(dst_addr, dst_port, ttl):
     recv_icmp = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
     recv_tcp = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     recv_icmp.settimeout(TIMEOUT)
+    recv_icmp.setsockopt(socket.IPPROTO_IP,socket.IP_TTL,ttl)
     recv_tcp.settimeout(TIMEOUT)
 
     syn_pkt = IP(dst=dst_addr, ttl=ttl) / TCP(dport=dst_port, sport=54321, flags='S')

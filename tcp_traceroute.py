@@ -44,11 +44,12 @@ class RecvSocket:
                 self.pkt, self.address = self.sock.recvfrom(1024)
             except socket.timeout:
                 break
+            
 
         
             self.rcv_time = time.time()
-        
             
+            # object is raw ICMP sock
             if self.type == 1:
                 ip = IP(self.pkt)
                 icmp = ip[ICMP]
@@ -71,14 +72,15 @@ class RecvSocket:
                     
                     self.delay = None
                     self.info = DST_UNREACHABLE
-                    
+
+            # object is raw TCP socket        
             elif self.type == 6:
                 self.delay = self.rcv_time - self.start_time
+                self.address = None
                 ip = IP(self.pkt)
                 tcp = ip[TCP]
-                #tcp.show()
-                #if 'A' in tcp.flags:
-                    #print('SYN-ACK RECEIVED')
+                if 'A' in tcp.flags:
+                    self.info = DST_REACHED
 
     # Returns the response address
     def get_addr(self):
@@ -102,11 +104,12 @@ def send_probe(dst_addr, dst_port, ttl):
     s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     s.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
 
+    
     # receiving sockets
     recv_icmp = RecvSocket(socket.IPPROTO_ICMP,ttl)
     recv_tcp = RecvSocket(socket.IPPROTO_TCP,ttl)
     threads = [threading.Thread(target=recv_icmp.run),threading.Thread(target=recv_tcp.run)]
-    #threads = [threading.Thread(target=recv_icmp.run)]
+
 
     # create and send TCP SYN probe
     syn_pkt = IP(dst=dst_addr, ttl=ttl) / TCP(dport=dst_port, sport=54321, flags='S')
@@ -185,7 +188,7 @@ def main():
 
     dest = socket.gethostbyname(target)
 
-    print("traceroute to %s (%s), %d hops max" % (target, dest, max_hops))
+    print("traceroute to %s (%s), %d hops max, TCP SYN to port %d" % (target, dest, max_hops,dst_port))
 
     traceroute(max_hops, dst_port, target, dest)
 

@@ -4,82 +4,72 @@ import time
 import socket
 import struct
 from scapy.layers.inet import *
-import threading
 
 # Author: Josh Messitte (811976008)
 # CSCI 6760 Project 4: tcp_traceroute.py
 # Usage: sudo python3 tcp_traceroute.py [-m MAX_HOPS] [-p DST_PORT] [-t TARGET]
 
-TIMEOUT = 0.5
+TIMEOUT = 0.25
+SOCKET_TIMEOUT = 0
 DST_REACHED = 1
 DST_UNREACHABLE = 2
 ICMP_ECHO_REQUEST = 8
-SOCKET_TIMEOUT = 0
 
 
-# controls flow for performing one ping
-def send_probe(dst_addr, dst_port, ttl):
-    # sending socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-    s.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
+# receives the echo from the target, returns delay
+def rcv_ping(icmp_socket):
+    start = time.time()
 
-    # receiving sockets
-    recv_icmp = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-    recv_icmp.settimeout(2)
-    recv_icmp.setblocking(0)
-    recv_tcp = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-    recv_tcp.settimeout(2)
-    recv_tcp.setblocking(0)
+    while (start + TIMEOUT - time.time()) > 0:
 
-    syn_pkt = IP(dst=dst_addr, ttl=ttl) / TCP(dport=dst_port, sport=54321, flags='S')
-    s.sendto(bytes(syn_pkt), (dst_addr, dst_port))
-
-    isICMP = False
-    isTCP = False
-
-    start_time= time.time()
-
-    while True:
         try:
-            pkt, address = recv_icmp.recvfrom(1024)
-            isICMP = True
-        except socket.timeout:
-            break
-        try:
-            pkt, address = recv_tcp.recvfrom(1024)
-            isTCP = True
+            icmp_pkt, addr = icmp_socket.recvfrom(1024)
+            # tcp_pkt, addr = tcp_socket.recvfrom(1024)
         except socket.timeout:
             break
 
-    rcv_time = time.time()
-
-    if isICMP:
-        ip = IP(pkt)
+        rcvd_time = time.time()
+        ip = IP(icmp_pkt)
+        icmp = ip[ICMP]
+        # icmp.show()
         imcp_code = ip[ICMP].code
         icmp_type = ip[ICMP].type
 
         # ICMP type 11 code 0 --> TIME EXCEEDED
         if icmp_type == 11 and imcp_code == 0:
-            delay = rcv_time - start_time
-            info = None
+            return (rcvd_time - start), addr, None
         # ICMP type 0 code 0 --> ECHO REPLY (DST Reached)
         elif icmp_type == 0 and imcp_code == 0:
-            delay = rcv_time - start_time
-            info = DST_REACHED
+            return (rcvd_time - start), addr, DST_REACHED
         # ICMP type 3 --> DST UNREACHABLE
         elif icmp_type == 3:
-            delay = None
-            info = DST_UNREACHABLE
+            return None, None, DST_UNREACHABLE
 
-    elif(isTCP):
-        delay = rcv_time - start_time
-        address = None
-        ip = IP(pkt)
-        tcp = ip[TCP]
-        if 'A' in tcp.flags:
-            info = DST_REACHED
+    return None, None, SOCKET_TIMEOUT
 
-    return delay, address, info
+
+# sends a packet to the target
+def send_ping(icmp_sock, dst_addr, dst_port, id, ttl):
+    # the packets we will be sending TCP SYN packets
+    icmp_pkt = ICMP(type=8, code=0, chksum=0, id=id, seq=1)
+    icmp_sock.sendto(bytes(icmp_pkt), (dst_addr, 0))
+
+# controls flow for performing one ping
+def perform_ping(dst_addr, dst_port, ttl):
+
+    icmp_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+    icmp_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
+    icmp_socket.settimeout(TIMEOUT)
+
+    # store current process ID
+    id = os.getpid() & 0xFFFF
+
+    send_ping(icmp_socket, dst_addr, dst_port, id, ttl)
+    delay = rcv_ping(icmp_socket)
+
+    icmp_socket.close()
+
+    return delay
 
 
 # prints results of a ping
@@ -114,7 +104,7 @@ def traceroute(max_hops, dst_port, dst_host, dst_addr):
 
         # compute latency 3 times
         for i in range(3):
-            delay, address, info = send_probe(dst_addr, dst_port, ttl)
+            delay, address, info = perform_ping(dst_addr, dst_port, ttl)
             print_part(delay, address, prev_addr)
             prev_addr = address
 

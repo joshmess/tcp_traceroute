@@ -11,8 +11,4 @@ $ python3 tcp_traceroute.py [-m MAX_HOPS] [-p DST_PORT] -t TARGET
 
 
 ### Current State:
-- Now sending TCP probes
-
-### To Do:
-- TCP version seems to cut off earlier for some reason
-- I cannot fix this bug for the life of me
+- ICMP and TCP Traceroute scripts
